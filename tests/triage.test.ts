@@ -38,9 +38,9 @@ function flags(a: Applicant, p: Program): RiskFlag[] {
 }
 
 describe("computeTriage", () => {
-  it("auto-approves a clean adult, low-amount, well-formed SSN", () => {
+  it("returns standard tier for a clean adult, low-amount, well-formed SSN", () => {
     const result = computeTriage(makeApplicant(), makeProgram(), NOW);
-    expect(result.reviewTier).toBe("auto_approve");
+    expect(result.reviewTier).toBe("standard");
     expect(result.riskFlags).toEqual([]);
   });
 

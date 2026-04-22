@@ -94,7 +94,7 @@ Pure functions in [`src/domain/triage.ts`](src/domain/triage.ts). Each rule is i
 | Minor applicant | Age derived from DOB, less than 18 at submission | `MINOR` |
 | Suspicious SSN | Area `000`, `666`, or `9xx`; group `00`; serial `0000`; all-same-digit; known placeholders | `SUSPICIOUS_SSN` |
 
-`reviewTier` is `manual_review` if any flag fires, else `auto_approve`. The agreement checkbox is a validation gate, not a triage rule. An unchecked agreement is rejected before triage runs.
+`reviewTier` is `manual_review` if any flag fires, else `standard`. The agreement checkbox is a validation gate, not a triage rule. An unchecked agreement is rejected before triage runs.
 
 Full rule list with rationale: [notes.md, section 4](notes.md#4-triage-rules).
 

@@ -187,7 +187,7 @@ The brief evaluates "sensitive data protection." Here's the data flow, explicit.
 
 ## 4. Triage rules
 
-Pure functions in [src/domain/triage.ts](src/domain/triage.ts). Each rule is independent. Multiple rules can fire on the same submission; the flags stack. `reviewTier` resolves to `manual_review` if any flag is present, else `auto_approve`.
+Pure functions in [src/domain/triage.ts](src/domain/triage.ts). Each rule is independent. Multiple rules can fire on the same submission; the flags stack. `reviewTier` resolves to `manual_review` if any flag is present, else `standard` (the two values specified by the assignment).
 
 ### Rules
 

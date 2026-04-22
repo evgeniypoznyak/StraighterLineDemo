@@ -314,7 +314,7 @@ function SelectField({
 }
 
 function SuccessPanel({ state }: { state: Extract<ApplyFormState, { status: "success" }> }) {
-  const tierLabel = state.reviewTier === "auto_approve" ? "Auto-approved" : "Sent for manual review";
+  const tierLabel = state.reviewTier === "standard" ? "Approved (standard)" : "Sent for manual review";
   return (
     <div className="rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-900 dark:bg-green-950">
       <h2 className="text-lg font-semibold text-green-900 dark:text-green-100">

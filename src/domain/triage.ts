@@ -1,7 +1,7 @@
 import type { Applicant } from "./applicant";
 import type { Program } from "./program";
 
-export type ReviewTier = "auto_approve" | "manual_review";
+export type ReviewTier = "standard" | "manual_review";
 
 export type RiskFlag = "HIGH_AMOUNT" | "MINOR" | "SUSPICIOUS_SSN";
 
@@ -83,7 +83,7 @@ export function computeTriage(
   }
 
   return {
-    reviewTier: flags.length > 0 ? "manual_review" : "auto_approve",
+    reviewTier: flags.length > 0 ? "manual_review" : "standard",
     riskFlags: flags,
   };
 }

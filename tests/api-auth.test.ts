@@ -95,7 +95,7 @@ describe("POST /api/applications", () => {
     const json = await res.json();
     expect(typeof json.applicationId).toBe("string");
     expect(json.applicationId.length).toBeGreaterThan(0);
-    expect(json.reviewTier).toBe("auto_approve");
+    expect(json.reviewTier).toBe("standard");
     expect(json.riskFlags).toEqual([]);
     expect(applicationRepo.count()).toBe(1);
     expect(handoffRepo.count()).toBe(1);
