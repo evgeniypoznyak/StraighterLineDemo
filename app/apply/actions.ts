@@ -3,6 +3,7 @@
 import { ValidationError } from "@/src/domain/errors";
 import { submitApplication } from "@/src/application/submit-application";
 import type { RiskFlag, ReviewTier } from "@/src/domain/triage";
+import { rawApplicationFromFormData } from "./form-data";
 
 export type ApplyFormState =
   | { status: "idle" }
@@ -14,36 +15,11 @@ export type ApplyFormState =
       riskFlags: RiskFlag[];
     };
 
-function s(v: FormDataEntryValue | null): string {
-  return typeof v === "string" ? v : "";
-}
-
 export async function submitApplicationAction(
   _prev: ApplyFormState,
   formData: FormData,
 ): Promise<ApplyFormState> {
-  const raw = {
-    applicant: {
-      firstName: s(formData.get("firstName")),
-      lastName: s(formData.get("lastName")),
-      email: s(formData.get("email")),
-      phone: s(formData.get("phone")),
-      dateOfBirth: s(formData.get("dateOfBirth")),
-      ssn: s(formData.get("ssn")),
-      address: {
-        line1: s(formData.get("addressLine1")),
-        line2: s(formData.get("addressLine2")),
-        city: s(formData.get("city")),
-        state: s(formData.get("state")),
-        postalCode: s(formData.get("postalCode")),
-      },
-    },
-    program: {
-      name: s(formData.get("programName")),
-      amountRequested: Number(s(formData.get("amountRequested"))),
-      agreementAccepted: formData.get("agreementAccepted") === "on",
-    },
-  };
+  const raw = rawApplicationFromFormData(formData);
 
   try {
     const result = submitApplication(raw);

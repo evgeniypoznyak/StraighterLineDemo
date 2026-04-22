@@ -87,6 +87,22 @@ The brief asks for a "separate in-memory record containing only the data needed 
 
 Vitest works with TypeScript and ESM out of the box with zero config on Next.js 16. Jest needs a Babel or SWC transform configured for ESM in this project shape. Vitest's `vi` mock API is compatible with Jest's `jest` if I ever needed to switch. No ceremony, fast startup, fits the four-hour budget.
 
+### Validate on both sides: client for UX, server for trust
+
+Validation runs on the client AND on the server. They share the same `validateApplicationInput` function. Different reasons, both load-bearing:
+
+- **Client-side is a UX affordance.** Users see inline errors immediately instead of waiting for a network roundtrip for each bad field. Feels fast, respects their time.
+- **Server-side is the source of truth.** The client can be tampered with, disabled, replayed, or called from curl. Anything that survives the network boundary must be re-validated. The client validator is convenience; the server validator is the contract.
+
+Implementation detail: `validateApplicationInput` is pure TypeScript (RegExp, Date, Number — no Node-only APIs), so it imports cleanly into the Client Component. The `FormData → raw` shaping was extracted into [`app/apply/form-data.ts`](app/apply/form-data.ts) so the Server Action and the client form share one conversion path.
+
+Flow:
+1. User submits. Client runs `validateApplicationInput` on the FormData.
+2. If invalid: `event.preventDefault()`, show inline errors, focus the first invalid field. No request is sent.
+3. If valid: the Server Action fires and re-validates. Triage + persist only run on valid input.
+
+Client errors clear as the user edits each field, so errors feel alive rather than stuck.
+
 ### Why hand-rolled validation instead of Zod
 
 For this scope (SSN patterns, DOB/age, email, amount bounds, required fields) a 60-line `validation.ts` is clearer than a Zod schema plus `safeParse` plus flattening errors. Zod is great when validation is the majority of the app's logic. Here it isn't. Keeping the dependency footprint minimal also means less supply-chain surface for a take-home that handles SSNs.
