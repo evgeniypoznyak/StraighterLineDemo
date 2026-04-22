@@ -1,5 +1,17 @@
 import type { Applicant } from "./applicant";
 import type { Program } from "./program";
+import {
+  normalizeSsn,
+  parseAmount,
+  validateAmount,
+  validateDateOfBirth,
+  validateEmail,
+  validatePhone,
+  validateRequiredField,
+  validateSsnFormat,
+  validateUsPostalCode,
+  validateUsStateCode,
+} from "./validators";
 
 export type ApplicationInput = {
   applicant: Applicant;
@@ -10,13 +22,6 @@ export type ValidationOutcome =
   | { ok: true; value: ApplicationInput }
   | { ok: false; fieldErrors: Record<string, string> };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SSN_RE = /^\d{3}-?\d{2}-?\d{4}$/;
-const POSTAL_RE = /^\d{5}(-\d{4})?$/;
-const PHONE_RE = /^[\d\s().+-]{7,20}$/;
-const STATE_RE = /^[A-Z]{2}$/;
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
@@ -25,14 +30,15 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function normalizeSsn(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5, 9)}`;
+function collect(
+  errors: Record<string, string>,
+  path: string,
+  message: string | null,
+) {
+  if (message) errors[path] = message;
 }
 
 export function validateApplicationInput(raw: unknown): ValidationOutcome {
-  const errors: Record<string, string> = {};
-
   if (!isPlainObject(raw)) {
     return { ok: false, fieldErrors: { _: "Request body must be an object" } };
   }
@@ -55,61 +61,24 @@ export function validateApplicationInput(raw: unknown): ValidationOutcome {
   const addrPostal = str(addressRaw.postalCode);
 
   const programName = str(programRaw.name);
-  const amountRaw = programRaw.amountRequested;
-  const amountRequested =
-    typeof amountRaw === "number"
-      ? amountRaw
-      : typeof amountRaw === "string" && amountRaw.trim() !== ""
-        ? Number(amountRaw)
-        : Number.NaN;
   const agreementAccepted = programRaw.agreementAccepted === true;
 
-  if (!firstName) errors["applicant.firstName"] = "First name is required";
-  if (!lastName) errors["applicant.lastName"] = "Last name is required";
-  if (!email) errors["applicant.email"] = "Email is required";
-  else if (!EMAIL_RE.test(email)) errors["applicant.email"] = "Enter a valid email address";
-  if (!phone) errors["applicant.phone"] = "Phone is required";
-  else if (!PHONE_RE.test(phone)) errors["applicant.phone"] = "Enter a valid phone number";
+  const errors: Record<string, string> = {};
 
-  if (!dateOfBirth) {
-    errors["applicant.dateOfBirth"] = "Date of birth is required";
-  } else if (!ISO_DATE_RE.test(dateOfBirth)) {
-    errors["applicant.dateOfBirth"] = "Use YYYY-MM-DD format";
-  } else {
-    const parsed = new Date(`${dateOfBirth}T00:00:00Z`);
-    if (Number.isNaN(parsed.getTime())) {
-      errors["applicant.dateOfBirth"] = "Not a valid date";
-    } else if (parsed.getTime() > Date.now()) {
-      errors["applicant.dateOfBirth"] = "Date of birth cannot be in the future";
-    } else if (parsed.getUTCFullYear() < 1900) {
-      errors["applicant.dateOfBirth"] = "Date of birth is unrealistic";
-    }
-  }
+  collect(errors, "applicant.firstName", validateRequiredField(firstName, "First name"));
+  collect(errors, "applicant.lastName", validateRequiredField(lastName, "Last name"));
+  collect(errors, "applicant.email", validateEmail(email));
+  collect(errors, "applicant.phone", validatePhone(phone));
+  collect(errors, "applicant.dateOfBirth", validateDateOfBirth(dateOfBirth));
+  collect(errors, "applicant.ssn", validateSsnFormat(ssnRaw));
 
-  let ssn = "";
-  if (!ssnRaw) {
-    errors["applicant.ssn"] = "SSN is required";
-  } else if (!SSN_RE.test(ssnRaw)) {
-    errors["applicant.ssn"] = "SSN must be 9 digits (XXX-XX-XXXX)";
-  } else {
-    ssn = normalizeSsn(ssnRaw);
-  }
+  collect(errors, "applicant.address.line1", validateRequiredField(addrLine1, "Street address"));
+  collect(errors, "applicant.address.city", validateRequiredField(addrCity, "City"));
+  collect(errors, "applicant.address.state", validateUsStateCode(addrState));
+  collect(errors, "applicant.address.postalCode", validateUsPostalCode(addrPostal));
 
-  if (!addrLine1) errors["applicant.address.line1"] = "Street address is required";
-  if (!addrCity) errors["applicant.address.city"] = "City is required";
-  if (!addrState) errors["applicant.address.state"] = "State is required";
-  else if (!STATE_RE.test(addrState)) errors["applicant.address.state"] = "Use the 2-letter state code";
-  if (!addrPostal) errors["applicant.address.postalCode"] = "Postal code is required";
-  else if (!POSTAL_RE.test(addrPostal)) errors["applicant.address.postalCode"] = "Use a US ZIP (5 or 9 digits)";
-
-  if (!programName) errors["program.name"] = "Program name is required";
-  if (!Number.isFinite(amountRequested)) {
-    errors["program.amountRequested"] = "Amount is required";
-  } else if (amountRequested <= 0) {
-    errors["program.amountRequested"] = "Amount must be greater than zero";
-  } else if (amountRequested > 1_000_000) {
-    errors["program.amountRequested"] = "Amount is unrealistically high";
-  }
+  collect(errors, "program.name", validateRequiredField(programName, "Program name"));
+  collect(errors, "program.amountRequested", validateAmount(programRaw.amountRequested));
 
   if (!agreementAccepted) {
     errors["program.agreementAccepted"] = "You must accept the agreement to submit";
@@ -119,13 +88,17 @@ export function validateApplicationInput(raw: unknown): ValidationOutcome {
     return { ok: false, fieldErrors: errors };
   }
 
+  const parsedAmount = parseAmount(programRaw.amountRequested);
+  // parsedAmount.ok is guaranteed true here because validateAmount passed above.
+  const amountRequested = parsedAmount.ok ? parsedAmount.value : Number.NaN;
+
   const applicant: Applicant = {
     firstName,
     lastName,
     email,
     phone,
     dateOfBirth,
-    ssn,
+    ssn: normalizeSsn(ssnRaw),
     address: {
       line1: addrLine1,
       ...(addrLine2 ? { line2: addrLine2 } : {}),

@@ -104,6 +104,27 @@ Flow:
 
 Per-field blur validation with clear-on-edit is the pattern. Submit-time validation is the safety net for fields the user never focused.
 
+### Refactor: extract per-field validators + US states dropdown
+
+After the first working version I ran a Clean Code / Refactoring pass. What I found:
+
+- `validation.ts` was a 115-line function doing everything (extraction, per-field checks, reassembly). Classic **Long Function** + **Mixed Levels of Abstraction**.
+- Regex constants (email, phone, SSN, postal, state, ISO date) sat inline at the top of the file, mixed with validation logic.
+- The state field was a 2-letter text input with a regex check. **Primitive Obsession**: the state code is a discrete enum, not an arbitrary string.
+- Magic numbers for amount bounds (`1_000_000`) and DOB floor (`1900`) were hardcoded, not named.
+
+What I changed:
+
+1. **Extracted each validator into its own file** under [`src/domain/validators/`](src/domain/validators/): `email.ts`, `phone.ts`, `ssn.ts`, `date-of-birth.ts`, `amount.ts`, `us-state.ts`, `postal-code.ts`, `required-field.ts`. Uniform contract: `(raw) => string | null`. Null means valid; a string is the user-facing error.
+2. **Added [`src/domain/us-states.ts`](src/domain/us-states.ts)** as the single source of truth for US states (50 + DC). Both the UI dropdown and the server validator read from the same list.
+3. **Replaced the state text input with a `<select>` dropdown** ([`app/apply/form.tsx`](app/apply/form.tsx)). Users can't type an invalid 2-letter code; the server validator accepts only codes in `US_STATES`.
+4. **Named the magic numbers** as `MAX_AMOUNT` in [`amount.ts`](src/domain/validators/amount.ts) and `EARLIEST_YEAR` in [`date-of-birth.ts`](src/domain/validators/date-of-birth.ts).
+5. **Rewrote `validation.ts` as a thin orchestrator**. It now pulls raw values, calls each validator, and reassembles. Down from ~115 lines to ~100, with the heavy lifting factored out.
+
+Tests for each validator live alongside at [`tests/validators/`](tests/validators/). Total went from 32 specs to 96.
+
+**Bug caught by the new tests.** The extracted `parseDateOfBirth` test included a "calendar impossibility" case: `1990-02-31`. JavaScript silently rolls that over to March 3 via `new Date()`, and the original inline code would have accepted it. The new per-validator test made the failure visible; I added a round-trip check (parse → `toISOString` → compare to input) that rejects rolled-over dates. The same test would have found the bug in the old code, but the old code didn't have a dedicated DOB test. This is the argument for small, focused test files over a single integration suite.
+
 ### Why hand-rolled validation instead of Zod
 
 For this scope (SSN patterns, DOB/age, email, amount bounds, required fields) a 100-line `validation.ts` is clearer than a Zod schema plus `safeParse` plus flattening errors. Zod is great when validation is the majority of the app's logic. Here it isn't. Keeping the dependency footprint minimal also means less supply-chain surface for a take-home that handles SSNs.
@@ -210,7 +231,7 @@ _(filled in as each phase completes)_
 
 ## 6. Testing approach
 
-Three test files, 32 assertions total. Run with `npm test`.
+Eleven test files, 96 assertions total. Run with `npm test`.
 
 ### What each file covers
 
@@ -221,6 +242,8 @@ Three test files, 32 assertions total. Run with `npm test`.
 - Combined flags: stacking plus `manual_review` resolution.
 
 **[`tests/validation.test.ts`](tests/validation.test.ts).** Input contract. Covers happy path, SSN normalization to `XXX-XX-XXXX`, unchecked agreement, malformed SSN, zero/negative amount, future DOB, invalid email, non-object body, and state-code uppercasing. If the validator drifts, these break.
+
+**[`tests/validators/*.test.ts`](tests/validators/).** Per-field validators: email, phone, SSN, date of birth, amount, US state, postal code, required field. Each validator has its own spec. This is where the extracted Clean Code refactor pays back: each regex, each bound, each rule is exercised in isolation. The suite caught a latent bug in DOB parsing (`1990-02-31` silently rolling over to March 3 in `new Date()`); the production code would have accepted the invalid date before the refactor.
 
 **[`tests/api-auth.test.ts`](tests/api-auth.test.ts).** The HTTP contract, against the real `POST` handler (imported directly and invoked with a mocked `NextRequest`):
 - 401 on missing `X-API-Key`.
@@ -284,6 +307,7 @@ If I had more time or this were going into production:
 - **Admin UI.** A reviewer queue reading from the handoff store. Filter by `reviewTier` and `riskFlags`. Audit log for every reviewer action (who saw what, when).
 - **Notifications.** Transactional email on submission, status change, and approval. Use a templated email service; unsubscribe handled out of band.
 - **Testing.** React Testing Library component tests for the form. Integration tests against a real DB in CI. Property-based tests on the triage rules (fast-check) to fuzz edge cases.
+- **End-to-end tests.** Playwright against the dev server for three critical paths: a valid submission reaching the success panel, a triage path (e.g. `HIGH_AMOUNT` stays on manual review), and an unauthorized API call returning 401. I skipped these for the 4-hour take-home because `api-auth.test.ts` already exercises the full HTTP + use case stack, and the remaining risk (UI/Action wiring regressions) is low with Server Actions calling the shared `submitApplication`. In production they're worth the setup.
 - **Idempotency.** An idempotency key header on `POST /api/applications` so a retrying client can't create duplicate records under a bad network.
 
 ---

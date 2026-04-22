@@ -12,11 +12,12 @@ app/
   api/applications/  POST handler (X-API-Key auth, calls the same use case)
 
 src/
-  domain/            Pure types, triage rules, validation
+  domain/            Pure types, triage rules, per-field validators, US states
+    validators/      One file per field: email, phone, ssn, dob, amount, ...
   application/       submitApplication use case
   infrastructure/    In-memory repositories, API-key auth, PII redaction
 
-tests/               32 vitest specs covering triage, validation, auth
+tests/               96 vitest specs covering validators, triage, validation, auth
 ```
 
 ## Setup
@@ -29,7 +30,7 @@ cp .env.example .env.local
 # edit .env.local and set APPLICATIONS_API_KEY to any non-empty string
 
 npm run dev       # http://localhost:3000/apply
-npm test          # run the vitest suite (32 specs)
+npm test          # run the vitest suite (96 specs)
 npm run lint
 npm run build     # verify production build
 ```

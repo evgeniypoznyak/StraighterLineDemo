@@ -4,6 +4,7 @@ import { useActionState, useState, type FormEvent, type FocusEvent } from "react
 import { useFormStatus } from "react-dom";
 
 import { validateApplicationInput } from "@/src/domain/validation";
+import { US_STATES } from "@/src/domain/us-states";
 
 import { submitApplicationAction, type ApplyFormState } from "./actions";
 import { rawApplicationFromFormData } from "./form-data";
@@ -35,7 +36,7 @@ export function ApplyForm() {
   }
 
   function handleFieldBlur(errorKey: string) {
-    return (event: FocusEvent<HTMLInputElement>) => {
+    return (event: FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
       validateFieldOnBlur(errorKey, event.currentTarget.form);
     };
   }
@@ -87,7 +88,18 @@ export function ApplyForm() {
           <Field label="Apt / Suite (optional)" name="addressLine2" errorKey="applicant.address.line2" autoComplete="address-line2" onChange={clearErrorFor} />
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="City" name="city" errorKey="applicant.address.city" required error={fieldErrors["applicant.address.city"]} autoComplete="address-level2" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.city")} />
-            <Field label="State" name="state" errorKey="applicant.address.state" required placeholder="NY" maxLength={2} error={fieldErrors["applicant.address.state"]} autoComplete="address-level1" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.state")} />
+            <SelectField
+              label="State"
+              name="state"
+              errorKey="applicant.address.state"
+              required
+              options={US_STATES.map((s) => ({ value: s.code, label: `${s.code} - ${s.name}` }))}
+              placeholder="Select a state"
+              error={fieldErrors["applicant.address.state"]}
+              autoComplete="address-level1"
+              onChange={clearErrorFor}
+              onBlur={handleFieldBlur("applicant.address.state")}
+            />
             <Field label="Postal code" name="postalCode" errorKey="applicant.address.postalCode" required error={fieldErrors["applicant.address.postalCode"]} autoComplete="postal-code" inputMode="numeric" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.postalCode")} />
           </div>
         </div>
@@ -183,7 +195,7 @@ type FieldProps = {
   min?: string;
   step?: string;
   onChange?: (errorKey: string) => void;
-  onBlur?: (event: FocusEvent<HTMLInputElement>) => void;
+  onBlur?: (event: FocusEvent<HTMLInputElement | HTMLSelectElement>) => void;
 };
 
 function Field({
@@ -226,6 +238,72 @@ function Field({
         onBlur={onBlur}
         className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 aria-[invalid=true]:border-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50"
       />
+      {error ? (
+        <p id={`${id}-error`} className="mt-1 text-sm text-red-700 dark:text-red-300">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+type SelectOption = { value: string; label: string };
+
+type SelectFieldProps = {
+  label: string;
+  name: string;
+  errorKey: string;
+  required?: boolean;
+  options: SelectOption[];
+  placeholder?: string;
+  error?: string;
+  autoComplete?: string;
+  onChange?: (errorKey: string) => void;
+  onBlur?: (event: FocusEvent<HTMLInputElement | HTMLSelectElement>) => void;
+};
+
+function SelectField({
+  label,
+  name,
+  errorKey,
+  required,
+  options,
+  placeholder,
+  error,
+  autoComplete,
+  onChange,
+  onBlur,
+}: SelectFieldProps) {
+  const id = `field-${name}`;
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+        {required ? <span className="ml-1 text-red-600">*</span> : null}
+      </label>
+      <select
+        id={id}
+        name={name}
+        required={required}
+        autoComplete={autoComplete}
+        defaultValue=""
+        aria-invalid={error ? "true" : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onChange={onChange ? () => onChange(errorKey) : undefined}
+        onBlur={onBlur}
+        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 aria-[invalid=true]:border-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50"
+      >
+        {placeholder ? (
+          <option value="" disabled>
+            {placeholder}
+          </option>
+        ) : null}
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
       {error ? (
         <p id={`${id}-error`} className="mt-1 text-sm text-red-700 dark:text-red-300">
           {error}
