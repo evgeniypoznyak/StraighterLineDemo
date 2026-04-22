@@ -101,13 +101,87 @@ Each commit should stand on its own: compiles, lints, tells one story. Not one b
 
 ## 3 — PII threat model
 
-_(filled in after Phase 3b)_
+The brief evaluates "sensitive data protection." Here's the data flow, explicit.
+
+### Where PII enters
+
+1. **Browser → Server Action.** A user fills the `/apply` form. Full PII (name, email, phone, DOB, SSN, address) is posted as `FormData` over HTTPS to a Server Action. This runs server-side; no client JS sees the raw SSN after the field loses focus.
+2. **External caller → POST /api/applications.** JSON body with the same shape. TLS expected (enforced at the infra boundary in production; not wired here).
+
+### Where PII lives
+
+- **Full `Application` aggregate.** Held in `src/infrastructure/repositories/application-repo.ts` as an in-memory `Map<id, Application>`. Per the brief, no persistence. In production this becomes a database row with SSN stored encrypted (KMS envelope, field-level).
+- **`DownstreamRecord`.** A different shape. Fields: `applicationId`, `applicantName`, `applicantEmail`, `programName`, `amountRequested`, `reviewTier`, `riskFlags`, `submittedAt`. No SSN. No DOB. No address. This is what a downstream reviewer queue or notification worker reads.
+
+### Where PII does NOT go
+
+- **Logs.** Every `console.*` call goes through `redact()` which replaces SSN with the last four digits and strips DOB/address. Grep the repo for raw `console.log(applicant.ssn)` to confirm there isn't one.
+- **API response.** The 200 response from `POST /api/applications` is `{ applicationId, reviewTier, riskFlags }`. No echo of submitted PII. Clients that need the full record would fetch it via a separate authenticated endpoint.
+- **Error messages.** Validation errors reference the field by path (`applicant.ssn`) with a human message ("SSN must be 9 digits"). They never echo the submitted value.
+- **The client bundle.** The API key never touches the browser because the UI goes through a Server Action, not `fetch('/api/applications')`.
+
+### Per-field handling
+
+| Field | Client | Server | Stored | Logged | In downstream record |
+|---|---|---|---|---|---|
+| First/last name | plaintext input | plaintext | plaintext | yes | yes |
+| Email | plaintext input | plaintext | plaintext | yes | yes |
+| Phone | plaintext input | plaintext | plaintext | no | no |
+| DOB | plaintext input | parsed to date | plaintext (in-memory) | no | no |
+| SSN | plaintext input | normalized to `XXX-XX-XXXX` | plaintext (in-memory; encrypted at rest in prod) | redacted to last 4 | **no** |
+| Address | plaintext input | plaintext | plaintext | no | no |
+
+### Auth and timing
+
+`X-API-Key` is compared with `crypto.timingSafeEqual`, not `===`. String equality short-circuits on the first differing byte, leaking the prefix length. Timing-safe compare runs in constant time.
+
+### What I'd add in production
+
+- Encryption at rest for SSN (AWS KMS envelope, field-level).
+- TLS enforcement + HSTS header.
+- Content Security Policy + SameSite=strict cookies + CSRF tokens for the form path.
+- Structured logging (Pino or Datadog) with a PII scrubber at the transport layer, not relying on `redact()` discipline at each call site.
+- Rate limiting on `POST /api/applications` by IP and by API key.
+- Append-only audit log: every submission, every lookup.
+- Secret rotation for `APPLICATIONS_API_KEY`, ideally via AWS Secrets Manager.
 
 ---
 
 ## 4 — Triage rules
 
-_(filled in after Phase 3b)_
+Pure functions in [src/domain/triage.ts](src/domain/triage.ts). Each rule is independent. Multiple rules can fire on the same submission; the flags stack. `reviewTier` resolves to `manual_review` if any flag is present, else `auto_approve`.
+
+### Rules
+
+| Rule | Trigger | Flag |
+|---|---|---|
+| High amount | `program.amountRequested > 1000` | `HIGH_AMOUNT` |
+| Minor applicant | Age derived from DOB `< 18` at submission time | `MINOR` |
+| Suspicious SSN | See patterns below | `SUSPICIOUS_SSN` |
+
+### Suspicious SSN patterns
+
+Based on Social Security Administration rules (numbers the SSA never issues) plus commonly-used placeholders:
+
+- Area number `000` (never assigned)
+- Area number `666` (never assigned)
+- Area number `9xx` (never assigned, reserved)
+- Group number `00`
+- Serial number `0000`
+- All nine digits the same (`111-11-1111` through `999-99-9999`)
+- Known placeholder `123-45-6789`
+
+Reference: [SSA SSN geo card history](https://www.ssa.gov/history/ssn/geocard.html).
+
+This is not exhaustive. In production I'd also run an SSN-validity service (e.g., Experian Precise ID, LexisNexis) to cross-check against issued-number records. That's an external dependency the brief excludes.
+
+### Pre-triage validation
+
+The agreement checkbox is **not** a triage rule. If unchecked, `validateApplicationInput` rejects the submission before triage runs. Unchecked agreement is a malformed submission, not a risky one.
+
+### Why not a score
+
+I considered a numeric risk score instead of a flag list. Rejected: for a downstream human reviewer, flag names ("MINOR", "HIGH_AMOUNT") are more actionable than "risk score = 0.7". The reviewer queue can sort/filter on flags directly.
 
 ---
 
