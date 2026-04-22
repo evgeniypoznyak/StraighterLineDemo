@@ -97,11 +97,12 @@ Validation runs on the client AND on the server. They share the same `validateAp
 Implementation detail: `validateApplicationInput` is pure TypeScript (RegExp, Date, Number — no Node-only APIs), so it imports cleanly into the Client Component. The `FormData → raw` shaping was extracted into [`app/apply/form-data.ts`](app/apply/form-data.ts) so the Server Action and the client form share one conversion path.
 
 Flow:
-1. User submits. Client runs `validateApplicationInput` on the FormData.
-2. If invalid: `event.preventDefault()`, show inline errors, focus the first invalid field. No request is sent.
-3. If valid: the Server Action fires and re-validates. Triage + persist only run on valid input.
+1. **On blur** of a field the user actually touched: re-run `validateApplicationInput`, pluck out that field's error, show it inline. Nothing else's errors are affected. This is what makes the UX feel alive — you see a bad email right when you Tab past it, not on submit.
+2. **On change** of a field with an existing error: clear its error immediately. The user is fixing it; yelling at them mid-keystroke is worse than waiting for the next blur.
+3. **On submit:** run `validateApplicationInput` on the full form. If invalid, `event.preventDefault()`, show every error, focus the first invalid field. Nothing is sent to the server.
+4. **On the server:** if the submission makes it through, the Server Action re-validates anyway. Triage + persist only run on valid input.
 
-Client errors clear as the user edits each field, so errors feel alive rather than stuck.
+Per-field blur validation + clear-on-edit is the pattern. Submit-time validation is the safety net for fields the user never focused.
 
 ### Why hand-rolled validation instead of Zod
 

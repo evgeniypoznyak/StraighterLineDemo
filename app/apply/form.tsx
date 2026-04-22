@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
+import { useActionState, useState, type FormEvent, type FocusEvent } from "react";
 import { useFormStatus } from "react-dom";
 
 import { validateApplicationInput } from "@/src/domain/validation";
@@ -18,11 +18,36 @@ export function ApplyForm() {
     return <SuccessPanel state={serverState} />;
   }
 
-  // Client errors take priority for fields the user just edited; server
-  // errors fill in anything the client validator didn't cover (defensive).
   const serverErrors = serverState.status === "error" ? serverState.fieldErrors : {};
   const fieldErrors = { ...serverErrors, ...clientErrors };
   const generalError = fieldErrors._;
+
+  function validateFieldOnBlur(errorKey: string, form: HTMLFormElement | null) {
+    if (!form) return;
+    const result = validateApplicationInput(rawApplicationFromFormData(new FormData(form)));
+    const fieldError = result.ok ? undefined : result.fieldErrors[errorKey];
+    setClientErrors((prev) => {
+      const next = { ...prev };
+      if (fieldError) next[errorKey] = fieldError;
+      else delete next[errorKey];
+      return next;
+    });
+  }
+
+  function handleFieldBlur(errorKey: string) {
+    return (event: FocusEvent<HTMLInputElement>) => {
+      validateFieldOnBlur(errorKey, event.currentTarget.form);
+    };
+  }
+
+  function clearErrorFor(errorKey: string) {
+    setClientErrors((prev) => {
+      if (!(errorKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[errorKey];
+      return next;
+    });
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     const form = event.currentTarget;
@@ -37,15 +62,6 @@ export function ApplyForm() {
     }
   }
 
-  function clearErrorFor(name: string) {
-    setClientErrors((prev) => {
-      if (!(name in prev)) return prev;
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
-  }
-
   return (
     <form action={formAction} onSubmit={handleSubmit} className="space-y-8" noValidate>
       {generalError ? (
@@ -56,38 +72,41 @@ export function ApplyForm() {
 
       <Fieldset title="Applicant">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="First name" name="firstName" errorKey="applicant.firstName" required error={fieldErrors["applicant.firstName"]} autoComplete="given-name" onChange={clearErrorFor} />
-          <Field label="Last name" name="lastName" errorKey="applicant.lastName" required error={fieldErrors["applicant.lastName"]} autoComplete="family-name" onChange={clearErrorFor} />
-          <Field label="Email" name="email" errorKey="applicant.email" type="email" required error={fieldErrors["applicant.email"]} autoComplete="email" onChange={clearErrorFor} />
-          <Field label="Phone" name="phone" errorKey="applicant.phone" type="tel" required error={fieldErrors["applicant.phone"]} autoComplete="tel" onChange={clearErrorFor} />
-          <Field label="Date of birth" name="dateOfBirth" errorKey="applicant.dateOfBirth" type="date" required error={fieldErrors["applicant.dateOfBirth"]} autoComplete="bday" onChange={clearErrorFor} />
-          <Field label="SSN" name="ssn" errorKey="applicant.ssn" required placeholder="XXX-XX-XXXX" error={fieldErrors["applicant.ssn"]} autoComplete="off" inputMode="numeric" onChange={clearErrorFor} />
+          <Field label="First name" name="firstName" errorKey="applicant.firstName" required error={fieldErrors["applicant.firstName"]} autoComplete="given-name" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.firstName")} />
+          <Field label="Last name" name="lastName" errorKey="applicant.lastName" required error={fieldErrors["applicant.lastName"]} autoComplete="family-name" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.lastName")} />
+          <Field label="Email" name="email" errorKey="applicant.email" type="email" required error={fieldErrors["applicant.email"]} autoComplete="email" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.email")} />
+          <Field label="Phone" name="phone" errorKey="applicant.phone" type="tel" required error={fieldErrors["applicant.phone"]} autoComplete="tel" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.phone")} />
+          <Field label="Date of birth" name="dateOfBirth" errorKey="applicant.dateOfBirth" type="date" required error={fieldErrors["applicant.dateOfBirth"]} autoComplete="bday" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.dateOfBirth")} />
+          <Field label="SSN" name="ssn" errorKey="applicant.ssn" required placeholder="XXX-XX-XXXX" error={fieldErrors["applicant.ssn"]} autoComplete="off" inputMode="numeric" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.ssn")} />
         </div>
       </Fieldset>
 
       <Fieldset title="Address">
         <div className="grid gap-4">
-          <Field label="Street" name="addressLine1" errorKey="applicant.address.line1" required error={fieldErrors["applicant.address.line1"]} autoComplete="address-line1" onChange={clearErrorFor} />
+          <Field label="Street" name="addressLine1" errorKey="applicant.address.line1" required error={fieldErrors["applicant.address.line1"]} autoComplete="address-line1" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.line1")} />
           <Field label="Apt / Suite (optional)" name="addressLine2" errorKey="applicant.address.line2" autoComplete="address-line2" onChange={clearErrorFor} />
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="City" name="city" errorKey="applicant.address.city" required error={fieldErrors["applicant.address.city"]} autoComplete="address-level2" onChange={clearErrorFor} />
-            <Field label="State" name="state" errorKey="applicant.address.state" required placeholder="NY" maxLength={2} error={fieldErrors["applicant.address.state"]} autoComplete="address-level1" onChange={clearErrorFor} />
-            <Field label="Postal code" name="postalCode" errorKey="applicant.address.postalCode" required error={fieldErrors["applicant.address.postalCode"]} autoComplete="postal-code" inputMode="numeric" onChange={clearErrorFor} />
+            <Field label="City" name="city" errorKey="applicant.address.city" required error={fieldErrors["applicant.address.city"]} autoComplete="address-level2" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.city")} />
+            <Field label="State" name="state" errorKey="applicant.address.state" required placeholder="NY" maxLength={2} error={fieldErrors["applicant.address.state"]} autoComplete="address-level1" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.state")} />
+            <Field label="Postal code" name="postalCode" errorKey="applicant.address.postalCode" required error={fieldErrors["applicant.address.postalCode"]} autoComplete="postal-code" inputMode="numeric" onChange={clearErrorFor} onBlur={handleFieldBlur("applicant.address.postalCode")} />
           </div>
         </div>
       </Fieldset>
 
       <Fieldset title="Program">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Program name" name="programName" errorKey="program.name" required error={fieldErrors["program.name"]} onChange={clearErrorFor} />
-          <Field label="Amount requested (USD)" name="amountRequested" errorKey="program.amountRequested" type="number" min="1" step="1" required error={fieldErrors["program.amountRequested"]} inputMode="numeric" onChange={clearErrorFor} />
+          <Field label="Program name" name="programName" errorKey="program.name" required error={fieldErrors["program.name"]} onChange={clearErrorFor} onBlur={handleFieldBlur("program.name")} />
+          <Field label="Amount requested (USD)" name="amountRequested" errorKey="program.amountRequested" type="number" min="1" step="1" required error={fieldErrors["program.amountRequested"]} inputMode="numeric" onChange={clearErrorFor} onBlur={handleFieldBlur("program.amountRequested")} />
         </div>
         <label className="flex items-start gap-3 text-sm text-zinc-700 dark:text-zinc-300">
           <input
             type="checkbox"
             name="agreementAccepted"
             className="mt-0.5 h-4 w-4 rounded border-zinc-300"
-            onChange={() => clearErrorFor("program.agreementAccepted")}
+            onChange={(e) => {
+              if (e.target.checked) clearErrorFor("program.agreementAccepted");
+              else validateFieldOnBlur("program.agreementAccepted", e.target.form);
+            }}
           />
           <span>
             I confirm the information above is accurate and I agree to the program terms.
@@ -106,7 +125,7 @@ export function ApplyForm() {
 function focusFirstError(form: HTMLFormElement, errors: Record<string, string>) {
   const firstKey = Object.keys(errors)[0];
   if (!firstKey) return;
-  const inputName = errorKeyToFieldName(firstKey);
+  const inputName = ERROR_KEY_TO_FIELD[firstKey];
   if (!inputName) return;
   const el = form.elements.namedItem(inputName);
   if (el instanceof HTMLElement) el.focus();
@@ -127,10 +146,6 @@ const ERROR_KEY_TO_FIELD: Record<string, string> = {
   "program.amountRequested": "amountRequested",
   "program.agreementAccepted": "agreementAccepted",
 };
-
-function errorKeyToFieldName(errorKey: string): string | undefined {
-  return ERROR_KEY_TO_FIELD[errorKey];
-}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -168,6 +183,7 @@ type FieldProps = {
   min?: string;
   step?: string;
   onChange?: (errorKey: string) => void;
+  onBlur?: (event: FocusEvent<HTMLInputElement>) => void;
 };
 
 function Field({
@@ -184,6 +200,7 @@ function Field({
   min,
   step,
   onChange,
+  onBlur,
 }: FieldProps) {
   const id = `field-${name}`;
   return (
@@ -206,6 +223,7 @@ function Field({
         aria-invalid={error ? "true" : undefined}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={onChange ? () => onChange(errorKey) : undefined}
+        onBlur={onBlur}
         className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors focus:border-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 aria-[invalid=true]:border-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-50"
       />
       {error ? (
