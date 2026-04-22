@@ -209,7 +209,38 @@ _(filled in as each phase completes)_
 
 ## 6 — Testing approach
 
-_(filled in after Phase 5)_
+Three test files, 32 assertions total. Run with `npm test`.
+
+### What each file covers
+
+**[`tests/triage.test.ts`](tests/triage.test.ts)** — the business logic. One test per rule plus boundary cases:
+- `HIGH_AMOUNT` at $1000 (not flagged — boundary is exclusive) and $1000.01 (flagged)
+- `MINOR` at 17, 18, and a birthday-not-yet-this-year edge (so the month/day logic in `ageAt` is exercised)
+- `SUSPICIOUS_SSN` parameterized over every pattern class: areas 000/666/9xx, group 00, serial 0000, all-same-digit, well-known placeholders. Plus a realistic SSN to prove the happy path
+- Combined flags: stacking + `manual_review` resolution
+
+**[`tests/validation.test.ts`](tests/validation.test.ts)** — input contract. Covers: happy path, SSN normalization to `XXX-XX-XXXX`, unchecked agreement, malformed SSN, zero/negative amount, future DOB, invalid email, non-object body, and state-code uppercasing. If the validator drifts, these break.
+
+**[`tests/api-auth.test.ts`](tests/api-auth.test.ts)** — the HTTP contract, against the real `POST` handler (imported directly and invoked with a mocked `NextRequest`):
+- 401 on missing `X-API-Key`
+- 401 on wrong `X-API-Key`
+- 400 on non-JSON body
+- 400 with `fieldErrors` on validation failure
+- 201 on happy path with `{ applicationId, reviewTier, riskFlags }` in the body
+- Triage routing: `manual_review` + `HIGH_AMOUNT` when amount > $1000
+- **PII assertion:** the downstream handoff record, JSON-serialized, does not contain the SSN, DOB, or street address. This is the code-level guarantee behind the PII threat model — if someone ever adds SSN to `DownstreamRecord`, this test will catch it immediately.
+
+### What I didn't test
+
+Given the four-hour cap, I left these out:
+
+- **React component tests** for the form. `useActionState` and Server Actions make these awkward to mock. The submit path is already covered end-to-end by `api-auth.test.ts` (it exercises the same `submitApplication` use case the form triggers). A component test would validate rendering, not behavior.
+- **Redaction helpers.** Small pure functions covered implicitly by the log output visible in the API test run (`***-**-6780`, `j***@example.com`). A unit test would be easy but low-value.
+- **Concurrency** against the in-memory repos. Node single-thread + module-scoped Map means no race. If persistence moved to a real DB, I'd add tests for unique-id generation under contention.
+
+### Why these tests and not more
+
+The brief asks for "at least one meaningful test." The three I wrote map to the three concerns the brief scores against: business logic (triage), data discipline (handoff has no PII), and API contract (auth + validation + 201 shape). That's the minimum set that, if they pass, gives me confidence in the implementation.
 
 ---
 
