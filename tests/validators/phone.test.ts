@@ -12,6 +12,11 @@ describe("validatePhone", () => {
     ["too short", "12345"],
     ["too long", "1".repeat(25)],
     ["unsupported chars", "555#123#4567"],
+    ["9 digits with separators", "123-456-789"],
+    ["9 digits no separators", "123456789"],
+    ["7 digits local only", "555-1234"],
+    ["11 digits not starting with 1", "25551234567"],
+    ["12 digits", "123456789012"],
   ])("rejects %s", (_label, input) => {
     expect(validatePhone(input)).toBe("Enter a valid phone number");
   });
@@ -21,6 +26,8 @@ describe("validatePhone", () => {
     "(555) 123-4567",
     "+1 555 123 4567",
     "5551234567",
+    "1-555-123-4567",
+    "+1 (555) 123-4567",
   ])("accepts %s", (input) => {
     expect(validatePhone(input)).toBeNull();
   });
