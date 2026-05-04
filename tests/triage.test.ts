@@ -45,11 +45,47 @@ describe("computeTriage", () => {
   });
 
   describe("HIGH_AMOUNT", () => {
-    it("does not flag at the $1000 threshold (boundary exclusive)", () => {
+    it("does not flag at exactly $1000 (handled by requires_documentation tier)", () => {
       expect(flags(makeApplicant(), makeProgram({ amountRequested: 1000 }))).not.toContain("HIGH_AMOUNT");
     });
-    it("flags above $1000", () => {
-      expect(flags(makeApplicant(), makeProgram({ amountRequested: 1000.01 }))).toContain("HIGH_AMOUNT");
+    it("flags above $1000 and routes to manual_review", () => {
+      const result = computeTriage(makeApplicant(), makeProgram({ amountRequested: 1000.01 }), NOW);
+      expect(result.riskFlags).toContain("HIGH_AMOUNT");
+      expect(result.reviewTier).toBe("manual_review");
+    });
+  });
+
+  describe("requires_documentation", () => {
+    it("routes to requires_documentation when amount is exactly $1000 and applicant is clean", () => {
+      const result = computeTriage(makeApplicant(), makeProgram({ amountRequested: 1000 }), NOW);
+      expect(result.reviewTier).toBe("requires_documentation");
+      expect(result.riskFlags).toEqual([]);
+    });
+
+    it("yields manual_review when amount is exactly $1000 but applicant is a MINOR", () => {
+      const result = computeTriage(
+        makeApplicant({ dateOfBirth: "2010-01-01" }),
+        makeProgram({ amountRequested: 1000 }),
+        NOW,
+      );
+      expect(result.reviewTier).toBe("manual_review");
+      expect(result.riskFlags).toContain("MINOR");
+    });
+
+    it("yields manual_review when amount is exactly $1000 but SSN is suspicious", () => {
+      const result = computeTriage(
+        makeApplicant({ ssn: "666-12-3456" }),
+        makeProgram({ amountRequested: 1000 }),
+        NOW,
+      );
+      expect(result.reviewTier).toBe("manual_review");
+      expect(result.riskFlags).toContain("SUSPICIOUS_SSN");
+    });
+
+    it("stays standard just below the threshold", () => {
+      const result = computeTriage(makeApplicant(), makeProgram({ amountRequested: 999.99 }), NOW);
+      expect(result.reviewTier).toBe("standard");
+      expect(result.riskFlags).toEqual([]);
     });
   });
 

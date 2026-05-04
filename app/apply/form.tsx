@@ -5,9 +5,16 @@ import { useFormStatus } from "react-dom";
 
 import { validateApplicationInput } from "@/src/domain/validation";
 import { US_STATES } from "@/src/domain/us-states";
+import type { ReviewTier } from "@/src/domain/triage";
 
 import { submitApplicationAction, type ApplyFormState } from "./actions";
 import { rawApplicationFromFormData } from "./form-data";
+
+const REVIEW_TIER_LABELS: Record<ReviewTier, string> = {
+  standard: "Approved (standard)",
+  manual_review: "Sent for manual review",
+  requires_documentation: "Documentation required",
+};
 
 const INITIAL_STATE: ApplyFormState = { status: "idle" };
 
@@ -314,7 +321,7 @@ function SelectField({
 }
 
 function SuccessPanel({ state }: { state: Extract<ApplyFormState, { status: "success" }> }) {
-  const tierLabel = state.reviewTier === "standard" ? "Approved (standard)" : "Sent for manual review";
+  const tierLabel = REVIEW_TIER_LABELS[state.reviewTier];
   return (
     <div className="rounded-lg border border-green-200 bg-green-50 p-6 dark:border-green-900 dark:bg-green-950">
       <h2 className="text-lg font-semibold text-green-900 dark:text-green-100">
